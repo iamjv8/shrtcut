@@ -1,13 +1,13 @@
-import { ValidationError, StorageError } from './errors';
-import { getCurrentUser } from './auth';
+import { ValidationError, StorageError } from "./errors";
+import { getCurrentUser } from "./auth";
+import axiosInstance from "./interceptor";
+import { toast } from "react-hot-toast";
 
 export interface Url {
-  id: string;
-  originalUrl: string;
-  shortCode: string;
-  createdAt: string;
-  visits: number;
+  _id?: string;
+  url: string;
   userId: string;
+  shortUrl?: string;
 }
 
 const validateUrl = (url: string): boolean => {
@@ -19,110 +19,112 @@ const validateUrl = (url: string): boolean => {
   }
 };
 
-export const saveUrl = (url: Url) => {
+export const saveUrl = async (url: Url) => {
   try {
-    if (!url.originalUrl.trim()) {
-      throw new ValidationError('URL is required');
+    if (!url.url.trim()) {
+      throw new ValidationError("URL is required");
     }
 
-    if (!validateUrl(url.originalUrl)) {
-      throw new ValidationError('Please enter a valid URL (e.g., https://example.com)');
+    if (!validateUrl(url.url)) {
+      throw new ValidationError(
+        "Please enter a valid URL (e.g., https://example.com)"
+      );
     }
 
-    const urls = JSON.parse(localStorage.getItem('urls') || '[]');
-    
+    const urls = await getUrls();
+
     // Check for duplicate short codes
-    if (urls.some((u: Url) => u.shortCode === url.shortCode)) {
-      throw new ValidationError('Please try again - this short code is already taken');
+    if (urls.some((u: Url) => u.shortUrl === url.shortUrl)) {
+      throw new ValidationError(
+        "Please try again - this short code is already taken"
+      );
     }
 
-    urls.unshift(url);
-    localStorage.setItem('urls', JSON.stringify(urls));
+    await axiosInstance.post(`/url/create`, url);
   } catch (error) {
     if (error instanceof ValidationError) {
       throw error;
     }
-    throw new StorageError('Failed to save URL. Please try again.');
+    throw new StorageError("Failed to save URL. Please try again.");
   }
 };
 
-export const getUrls = (): Url[] => {
+export const getUrls = async (): Promise<Url[]> => {
   try {
-    const urls = JSON.parse(localStorage.getItem('urls') || '[]');
     const currentUser = getCurrentUser();
-    
+
     if (!currentUser) return [];
-    
-    return currentUser.role === 'admin' 
-      ? urls 
-      : urls.filter((url: Url) => url.userId === currentUser.id);
+    let urls: Url[] = [];
+
+    try {
+      const response = await axiosInstance.post(`/url/all`, {
+        userId: currentUser?._id,
+      });
+      urls = response.data.urls || [];
+    } catch (error) {
+      console.error("Failed to fetch URLs:", error);
+    }
+
+    return urls;
   } catch (error) {
-    throw new StorageError('Failed to fetch your URLs. Please refresh the page.');
+    throw new StorageError(
+      "Failed to fetch your URLs. Please refresh the page."
+    );
   }
 };
 
-export const deleteUrl = (id: string) => {
+export const deleteUrl = async (id: string) => {
   try {
     if (!id) {
-      throw new ValidationError('URL ID is required');
+      throw new ValidationError("URL ID is required");
     }
 
-    const urls = JSON.parse(localStorage.getItem('urls') || '[]');
-    const urlToDelete = urls.find((url: Url) => url.id === id);
-
-    if (!urlToDelete) {
-      throw new ValidationError('URL not found');
-    }
-
-    const filteredUrls = urls.filter((url: Url) => url.id !== id);
-    localStorage.setItem('urls', JSON.stringify(filteredUrls));
+    await axiosInstance.delete(`/url/${id}`);
   } catch (error) {
     if (error instanceof ValidationError) {
       throw error;
     }
-    throw new StorageError('Failed to delete URL. Please try again.');
+    throw new StorageError("Failed to delete URL. Please try again.");
   }
 };
 
 export const findUrlByShortCode = (shortCode: string): Url | null => {
   try {
     if (!shortCode) {
-      throw new ValidationError('Short code is required');
+      throw new ValidationError("Short code is required");
     }
 
-    const urls = JSON.parse(localStorage.getItem('urls') || '[]');
+    const urls = JSON.parse(localStorage.getItem("urls") || "[]");
     return urls.find((url: Url) => url.shortCode === shortCode) || null;
   } catch (error) {
     if (error instanceof ValidationError) {
       throw error;
     }
-    throw new StorageError('Failed to find URL. Please check the short code.');
+    throw new StorageError("Failed to find URL. Please check the short code.");
   }
 };
 
 export const incrementVisits = (shortCode: string) => {
   try {
     if (!shortCode) {
-      throw new ValidationError('Short code is required');
+      throw new ValidationError("Short code is required");
     }
 
-    const urls = JSON.parse(localStorage.getItem('urls') || '[]');
+    const urls = JSON.parse(localStorage.getItem("urls") || "[]");
     const urlExists = urls.some((url: Url) => url.shortCode === shortCode);
 
     if (!urlExists) {
-      throw new ValidationError('URL not found');
+      throw new ValidationError("URL not found");
     }
 
-    const updatedUrls = urls.map((url: Url) => 
-      url.shortCode === shortCode 
-        ? { ...url, visits: url.visits + 1 }
-        : url
+    const updatedUrls = urls.map((url: Url) =>
+      url.shortCode === shortCode ? { ...url, visits: url.visits + 1 } : url
     );
-    localStorage.setItem('urls', JSON.stringify(updatedUrls));
+    localStorage.setItem("urls", JSON.stringify(updatedUrls));
   } catch (error) {
     if (error instanceof ValidationError) {
       throw error;
     }
-    throw new StorageError('Failed to update visit count.');
+    throw new StorageError("Failed to update visit count.");
   }
 };

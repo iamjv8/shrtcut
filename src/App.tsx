@@ -27,23 +27,23 @@ function Dashboard({ onLogout }: DashboardProps) {
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
 
+  const fetchUrls = async () => {
+    const urls = await getUrls();
+    setUrls(urls);
+  };
   useEffect(() => {
     if (!currentUser) {
       navigate("/");
       return;
     }
     try {
-      setUrls(getUrls());
+      fetchUrls();
     } catch (error) {
       if (error instanceof StorageError) {
         toast.error(error.message);
       }
     }
   }, [navigate]);
-
-  const generateShortCode = () => {
-    return Math.random().toString(36).substring(2, 8);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,19 +55,14 @@ function Dashboard({ onLogout }: DashboardProps) {
 
     try {
       setLoading(true);
-      const shortCode = generateShortCode();
 
       const newUrl: Url = {
-        id: crypto.randomUUID(),
-        originalUrl: url,
-        shortCode,
-        createdAt: new Date().toISOString(),
-        visits: 0,
-        userId: currentUser!.id,
+        url: url,
+        userId: currentUser?._id || "",
       };
-
-      saveUrl(newUrl);
-      setUrls(getUrls());
+      console.log(newUrl);
+      await saveUrl(newUrl);
+      fetchUrls();
       setUrl("");
       toast.success("URL shortened successfully!");
     } catch (error) {
@@ -83,10 +78,10 @@ function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     try {
-      deleteUrl(id);
-      setUrls(getUrls());
+      await deleteUrl(id);
+      fetchUrls();
       toast.success("URL deleted successfully");
     } catch (error) {
       if (error instanceof StorageError) {
@@ -187,35 +182,36 @@ function Dashboard({ onLogout }: DashboardProps) {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {urls.map((item) => (
+                    {urls?.map((item) => (
                       <div
-                        key={item.id}
+                        key={item._id}
                         className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-6 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors gap-4 sm:gap-0"
                       >
                         <div className="flex-1 min-w-0">
                           <p className="text-sm sm:text-base font-medium text-gray-900 break-all sm:truncate mb-2">
-                            {item.originalUrl}
+                            Original URL: {item.url}
                           </p>
                           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                            Short URL:
                             <button
                               onClick={() =>
                                 copyToClipboard(
-                                  `${window.location.origin}/${item.shortCode}`
+                                  `${window.location.origin}/${item.shortUrl}`
                                 )
                               }
                               className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1 transition-colors"
                             >
-                              {window.location.origin}/{item.shortCode}
+                              {window.location.origin}/{item.shortUrl}
                               <ExternalLink className="w-4 h-4" />
                             </button>
-                            <span className="text-gray-500 text-sm">
+                            {/* <span className="text-gray-500 text-sm">
                               {item.visits}{" "}
                               {item.visits === 1 ? "visit" : "visits"}
-                            </span>
+                            </span> */}
                           </div>
                         </div>
                         <button
-                          onClick={() => handleDelete(item.id)}
+                          onClick={() => handleDelete(item._id)}
                           className="text-red-600 hover:text-red-700 text-sm font-medium transition-colors sm:ml-4"
                         >
                           Delete
